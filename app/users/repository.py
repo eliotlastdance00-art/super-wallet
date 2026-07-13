@@ -1,5 +1,4 @@
 from typing import Any
-
 import asyncpg
 
 
@@ -8,7 +7,7 @@ class UserRepository:
         self.connection = connection
 
     async def create(
-        self, username: str, email: str, hashed_password: str
+        self, username: str, email: str, hashed_password:str
     ) -> dict[str, Any]:
         row = await self.connection.fetchrow(
             """

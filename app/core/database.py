@@ -1,6 +1,5 @@
 import logging
 from contextlib import asynccontextmanager
-from .config import settings
 from typing import AsyncIterator
 import asyncpg
 from asyncpg import Connection, Pool
@@ -19,7 +18,7 @@ class DatabasePool:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    async def connect(self, dsn: str = settings.DATABASE_URL, min_size: int = 5, max_size: int = 20) -> None:
+    async def connect(self, dsn: str , min_size: int = 5, max_size: int = 20) -> None:
         if self._pool is not None:
             logger.warning("Pool is already created.")
             return
@@ -56,3 +55,9 @@ db = DatabasePool()
 async def get_connection() -> AsyncIterator[Connection]:
     async with db.pool.acquire() as connection:
         yield connection
+
+
+
+async def get_db() -> AsyncIterator[Connection]:
+    async with db.pool.acquire() as connection:
+        yield connection        
