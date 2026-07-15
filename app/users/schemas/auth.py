@@ -1,93 +1,104 @@
+# app/users/schemas/auth.py
+
 import re
-from datetime import datetime
 from uuid import UUID
-
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    Field,
-    SecretStr,
-    field_validator,
-    model_validator,
-)
-from typing_extensions import Self
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
 
-class UserRegisterSchema(BaseModel):
-    # 1. Username: Trims leading/trailing whitespace, max 50 chars (DB constraint)
-    username: str = Field(
-        ..., min_length=3, max_length=50, description="Unique username of the user"
-    )
+# =====================================================================
+# Umumy walidasiýa kadalary - birnäçe schema-da gaýtalanýar bolsa,
+# bir ýerde jemläp, DRY saklaýarys.
+# =====================================================================
 
-    # 2. Email: Pydantic's EmailStr automatically validates the email format
-    email: EmailStr = Field(
-        ..., max_length=100, description="Official email address of the user"
-    )
+_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
 
-    # 3. Password: DB stores 'hashed_password', but user inputs plain 'password'.
-    # SecretStr is used for security.
-    password: SecretStr = Field(
-        ...,
-        min_length=8,
-        max_length=100,
-        description="User password (minimum 8 characters)",
-    )
+# NIST 800-63B maslahaty: minimum uzynlyk möhüm, "hökman-uly-harp-belgi"
+# ýaly düzgünler köplenç ulanyjyny "Password1!" ýaly gowşak-emma-kada-gabat-gelýän
+# parollara iterýär. Şonuň üçin biz diňe UZYNLYK bilen "iň köp ýaýran
+# gowşak parollar" sanawyny barlaýarys, ýöne çylşyrymlylyk mejbur etmeýäris.
+_MIN_PASSWORD_LENGTH = 12
+_MAX_PASSWORD_LENGTH = 128  # DoS-dan gorag: çäksiz uzyn parol argon2-ni haýalladyp biler
 
-    # 4. Confirm Password: To verify the password was typed correctly (not saved to DB)
-    confirm_password: SecretStr = Field(..., description="Password confirmation")
+_COMMON_WEAK_PASSWORDS = {
+    "password123", "12345678910", "qwertyuiop12", "letmein12345",
+    # önümçilikde bu sanaw "Have I Been Pwned" API-sinden ýa-da
+    # rockyou.txt ýaly sanawdan has giň bolmaly
+}
 
-    # --- ADVANCED CONFIGURATION ---
-    model_config = {
-        "str_strip_whitespace": True,  # Trims leading and trailing whitespace from all strings
-        "extra": "forbid",  # Rejects extra fields not defined in the schema (for security)
-    }
 
-    # --- ADVANCED VALIDATORS ---
+def _validate_password_strength(value: str) -> str:
+    if len(value) < _MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Parol azyndan {_MIN_PASSWORD_LENGTH} belgiden ybarat bolmaly")
+    if len(value) > _MAX_PASSWORD_LENGTH:
+        raise ValueError(f"Parol {_MAX_PASSWORD_LENGTH} belgiden köp bolmaly däl")
+    if value.lower() in _COMMON_WEAK_PASSWORDS:
+        raise ValueError("Bu parol gaty ýönekeý, başga parol saýlaň")
+    return value
 
-    @field_validator("password")
-    @classmethod
-    def validate_password_strength(cls, value: SecretStr) -> SecretStr:
-        """Validates that the password contains at least 1 uppercase letter and 1 digit."""
-        raw_pwd = value.get_secret_value()
-        if not any(char.isupper() for char in raw_pwd):
-            raise ValueError(
-                "Password must contain at least one uppercase letter (A-Z)!"
-            )
-        if not any(char.isdigit() for char in raw_pwd):
-            raise ValueError("Password must contain at least one digit (0-9)!")
-        return value
 
-    @model_validator(mode="after")
-    def verify_passwords_match(self) -> Self:
-        """Verifies that the Password and Confirm Password fields are identical."""
-        if self.password.get_secret_value() != self.confirm_password.get_secret_value():
-            raise ValueError("Passwords do not match!")
-        return self
+# =====================================================================
+# REGISTER
+# =====================================================================
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)  # boşluklary awtomatik arassalaýar
+
+    email: EmailStr
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH)
 
     @field_validator("username")
     @classmethod
-    def username_valid(cls, v: str) -> str:
-        if not (3 <= len(v) <= 50):
-            raise ValueError("Username must be 3-50 characters")
-        if not re.match(r"^[a-zA-Z0-9_]+$", v):
-            raise ValueError("Username can only contain letters, digits, underscore")
-        return v
+    def validate_username_format(cls, value: str) -> str:
+        if not _USERNAME_PATTERN.match(value):
+            raise ValueError("Ulanyjy ady diňe harp, san we '_' bolmaly (3-32 belgi)")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password_strength(value)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        # Email-i kiçi harplara öwürmek - "User@Mail.com" bilen
+        # "user@mail.com" iki AÝRY hasap bolup galmaz ýaly.
+        # Bu barlagy schema-da etmek, DB-de "case-insensitive unique
+        # index" bilen bilelikde iki gatlaklaýyn gorag berýär.
+        return value.lower()
 
 
-class UserLoginSchema(BaseModel):
-    email: EmailStr
-    password: SecretStr
-
-
-class TokenRefreshSchema(BaseModel):
-    refresh_token: str
-
-
-class UserResponse(BaseModel):
-    id: UUID
-    username: str
+class RegisterResponse(BaseModel):
+    # Bilgeşleýin diňe user_id + email gaýtarýarys - password_hash,
+    # totp_secret ýaly HIÇ HAÇAN response-a çykmaly däl zatlar üçin
+    # "response schema" aýratyn ýazylýar, User model-iň özi gaýtarylmaýar.
+    user_id: UUID
     email: str
-    created_at: datetime
+    message: str = "Hasabyňyzy tassyklamak üçin e-poçtaňyzy barlaň"
 
-    class Config:
-        from_attributes = True
+
+# =====================================================================
+# LOGIN
+# =====================================================================
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=_MAX_PASSWORD_LENGTH)
+    # totp_code - Optional, sebäbi diňe totp_enabled=true bolan
+    # ulanyjylardan gerek. Min/max length - 6 haneli koddan başga
+    # zat iberilse, DB/security.py-a ýetmänkä şu ýerde saklanýar.
+    totp_code: str | None = Field(default=None, min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.lower()
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int = 900  # security.py-daky ACCESS_TOKEN_TTL_SECONDS bilen SINHRON saklanmaly

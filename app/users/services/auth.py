@@ -1,5 +1,3 @@
-
-
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -39,7 +37,7 @@ class RegisterService:
         username: str,
         password: str,
         ip_address: str,
-        user_agent: str,
+        user_agent: str | None,
     ) -> RegisterResult:
         async with conn.transaction():
             await self._ensure_email_and_username_free(
@@ -69,7 +67,7 @@ class RegisterService:
             )
 
     async def _ensure_email_and_username_free(
-        self, conn, email: str, username: str, ip_address: str, user_agent: str
+        self, conn, email: str, username: str, ip_address: str, user_agent: str | None
     ) -> None:
         """
         Iki barlagy aýratyn funksiýa etdim, sebäbi "haýsy sebäp bilen
@@ -122,7 +120,7 @@ class LoginService:
         password: str,
         totp_code: str | None,
         ip_address: str,
-        user_agent: str,
+        user_agent: str |None
     ) -> LoginResult:
         async with conn.transaction():
             user = await self._repo.get_by_email(email)
@@ -139,13 +137,13 @@ class LoginService:
 
             self._ensure_not_locked(user)
 
-            if not security.verify_password(password, user.password_hash):
+            if not security.verify_password(password, user.hashed_password):
                 await self._register_failed_attempt(conn, user, ip_address, user_agent)
                 raise LoginError(email=email)
 
             # Parol dogry - eger köne hash parametrleri bilen hash-lanan bolsa, täzele.
             # Muny diňe şu ýerde edip bolýar, sebäbi plaintext parol diňe şu pursat elde.
-            if security.needs_rehash(user.password_hash):
+            if security.needs_rehash(user.hashed_password):
                 new_hash = security.hash_password(password)
                 await self._repo.update_password_hash(user.id, new_hash)
 
@@ -188,7 +186,7 @@ class LoginService:
             raise TotpRequiredError(user_id=str(user.id))
 
     async def _issue_tokens(
-        self, conn, user, ip_address: str, user_agent: str
+        self, conn, user, ip_address: str, user_agent: str | None
     ) -> LoginResult:
         access_token = security.create_access_token(user.id)
         refresh_token = security.generate_refresh_token()
@@ -231,7 +229,7 @@ class RefreshService:
         conn,
         refresh_token: str,
         ip_address: str,
-        user_agent: str,
+        user_agent: str | None
     ) -> RefreshResult:
         token_hash = security.hash_refresh_token(refresh_token)
 
@@ -332,13 +330,13 @@ class LogoutService:
     def __init__(self, session_repo: SessionRepository):
         self._session_repo = session_repo
 
-    async def execute(
+    async def execute( 
         self,
         conn,
         user_id: UUID,
         refresh_token: str,
         ip_address: str,
-        user_agent: str,
+        user_agent: str | None
     ) -> None:
         token_hash = security.hash_refresh_token(refresh_token)
 

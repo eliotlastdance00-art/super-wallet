@@ -10,7 +10,7 @@ class UserRecord:
     id: UUID
     username: str
     email: str
-    password_hash: str
+    hashed_password: str
     failed_login_count: int
     locked_until: datetime | None
     totp_enabled: bool
@@ -33,7 +33,7 @@ class UserRepository:
     async def create(self, username: str, email: str, hashed_password: str) -> UUID:
         row = await self._conn.fetchrow(
             """
-            INSERT INTO users (id, username, email, password_hash, created_at)
+            INSERT INTO users (id, username, email, hashed_password, created_at)
             VALUES (gen_random_uuid(), $1, $2, $3, now())
             RETURNING id
             """,
@@ -49,7 +49,7 @@ class UserRepository:
     async def get_by_id(self, user_id: UUID) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
-            SELECT id, username, email, password_hash, failed_login_count,
+            SELECT id, username, email, hashed_password , failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted
             FROM users WHERE id = $1
             """,
@@ -60,7 +60,7 @@ class UserRepository:
     async def get_by_email(self, email: str) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
-            SELECT id, username, email, password_hash, failed_login_count,
+            SELECT id, username, email, hashed_password, failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted
             FROM users WHERE email = $1
             """,
@@ -71,7 +71,7 @@ class UserRepository:
     async def get_by_username(self, username: str) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
-            SELECT id, username, email, password_hash, failed_login_count,
+            SELECT id, username, email, hashed_password, failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted
             FROM users WHERE username = $1
             """,
@@ -86,7 +86,7 @@ class UserRepository:
         şonuň üçin bir ýönekeý UPDATE ýeterlik.
         """
         await self._conn.execute(
-            "UPDATE users SET password_hash = $2 WHERE id = $1",
+            "UPDATE users SET hashed_password  = $2 WHERE id = $1",
             user_id,
             new_hash,
         )

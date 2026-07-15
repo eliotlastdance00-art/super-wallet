@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     # Use Field or provide default/None if you want to silence IDE type-checking warnings
     DATABASE_URL: str
     Alembic_URL: str
-    token_signing_key: str
-    encryption_key: str
+    TOKEN_SIGNING_KEY: str
+    ENCRYPTION_KEY: str
 
     # Modern Pydantic v2 Configuration
     model_config = SettingsConfigDict(

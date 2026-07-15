@@ -4,10 +4,10 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import time
 from typing import Any
+from app.core.config import settings
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -23,7 +23,7 @@ from cryptography.fernet import Fernet, InvalidToken
 # özi barlamaly bolsa, standart JWT-e geçmek maslahat berilýär.
 # Häzirki ýapyk monolith üçin bu ýeterlik.
 
-_SECRET_KEY = os.environ["TOKEN_SIGNING_KEY"]  # .env-den, uzyn/random setir
+_SECRET_KEY = settings.TOKEN_SIGNING_KEY
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -94,9 +94,7 @@ def verify_token(token: str) -> dict[str, Any] | None:
 # edil şu mehanizm gerek bolar. Domen bilimini talap etmeýän arassa
 # tehniki gural bolany üçin, bu ýerde ýaşamaly.
 
-_ENCRYPTION_KEY = os.environ[
-    "ENCRYPTION_KEY"
-]  # Fernet.generate_key() bilen gener edilen
+_ENCRYPTION_KEY = settings.ENCRYPTION_KEY
 _fernet = Fernet(_ENCRYPTION_KEY.encode())
 
 
