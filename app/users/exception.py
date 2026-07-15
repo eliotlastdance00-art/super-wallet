@@ -156,6 +156,7 @@ class RefreshTokenInvalidReason(str, enum.Enum):
     REVOKED = "revoked"
     REUSED = "reused"
     MALFORMED = "malformed"
+    MISSING ="missing"
 
 
 class InvalidRefreshTokenError(AuthError):

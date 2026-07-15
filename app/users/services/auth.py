@@ -120,7 +120,7 @@ class LoginService:
         password: str,
         totp_code: str | None,
         ip_address: str,
-        user_agent: str |None
+        user_agent: str | None,
     ) -> LoginResult:
         async with conn.transaction():
             user = await self._repo.get_by_email(email)
@@ -225,11 +225,7 @@ class RefreshService:
         self._session_repo = session_repo
 
     async def execute(
-        self,
-        conn,
-        refresh_token: str,
-        ip_address: str,
-        user_agent: str | None
+        self, conn, refresh_token: str, ip_address: str, user_agent: str | None
     ) -> RefreshResult:
         token_hash = security.hash_refresh_token(refresh_token)
 
@@ -237,13 +233,6 @@ class RefreshService:
             session = await self._session_repo.get_by_token_hash(token_hash)
 
             if session is None:
-                # Bu ýerde "session ýok" diýmek iki many bildirip biler:
-                # 1) token asla bolmandy (nädogry/ýasama)
-                # 2) token eýýäm bir gezek ulanylyp, rotate edilipdi (reuse!)
-                # Ikinji ýagdaýy tapmak üçin, "used_token_hashes" diýen
-                # aýratyn gysga-ömürli tablisa/Redis-de yzarlamak bolar -
-                # häzir muny SessionRepository-ň "get_by_used_token_hash"
-                # metody bilen barlaýarys (aşakda repository-de goşarys).
                 await self._handle_possible_reuse(
                     conn, token_hash, ip_address, user_agent
                 )
@@ -330,24 +319,18 @@ class LogoutService:
     def __init__(self, session_repo: SessionRepository):
         self._session_repo = session_repo
 
-    async def execute( 
+    async def execute(
         self,
         conn,
         user_id: UUID,
         refresh_token: str,
         ip_address: str,
-        user_agent: str | None
+        user_agent: str | None,
     ) -> None:
         token_hash = security.hash_refresh_token(refresh_token)
 
         async with conn.transaction():
             session = await self._session_repo.get_by_token_hash(token_hash)
-
-            # Bilgeşleýin "session tapylmady" bilen "session başga
-            # user-e degişli" ýagdaýlaryny BIR HABAR bilen jogaplaýarys -
-            # eger tapawutlandyrsak, hüjümçä "bu token başga birine
-            # degişli eken" diýen maglumat syzdyrylan bolar (IDOR-a
-            # meňzeş enumeration howpy).
             if session is None or session.user_id != user_id:
                 raise SessionNotFoundError("session_not_found")
 

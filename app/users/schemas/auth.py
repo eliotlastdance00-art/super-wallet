@@ -2,8 +2,8 @@
 
 import re
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # =====================================================================
 # Umumy walidasiýa kadalary - birnäçe schema-da gaýtalanýar bolsa,
@@ -16,11 +16,16 @@ _USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
 # ýaly düzgünler köplenç ulanyjyny "Password1!" ýaly gowşak-emma-kada-gabat-gelýän
 # parollara iterýär. Şonuň üçin biz diňe UZYNLYK bilen "iň köp ýaýran
 # gowşak parollar" sanawyny barlaýarys, ýöne çylşyrymlylyk mejbur etmeýäris.
-_MIN_PASSWORD_LENGTH = 12
-_MAX_PASSWORD_LENGTH = 128  # DoS-dan gorag: çäksiz uzyn parol argon2-ni haýalladyp biler
+_MIN_PASSWORD_LENGTH = 8
+_MAX_PASSWORD_LENGTH = (
+    128  # DoS-dan gorag: çäksiz uzyn parol argon2-ni haýalladyp biler
+)
 
 _COMMON_WEAK_PASSWORDS = {
-    "password123", "12345678910", "qwertyuiop12", "letmein12345",
+    "password123",
+    "12345678910",
+    "qwertyuiop12",
+    "letmein12345",
     # önümçilikde bu sanaw "Have I Been Pwned" API-sinden ýa-da
     # rockyou.txt ýaly sanawdan has giň bolmaly
 }
@@ -28,7 +33,9 @@ _COMMON_WEAK_PASSWORDS = {
 
 def _validate_password_strength(value: str) -> str:
     if len(value) < _MIN_PASSWORD_LENGTH:
-        raise ValueError(f"Parol azyndan {_MIN_PASSWORD_LENGTH} belgiden ybarat bolmaly")
+        raise ValueError(
+            f"Parol azyndan {_MIN_PASSWORD_LENGTH} belgiden ybarat bolmaly"
+        )
     if len(value) > _MAX_PASSWORD_LENGTH:
         raise ValueError(f"Parol {_MAX_PASSWORD_LENGTH} belgiden köp bolmaly däl")
     if value.lower() in _COMMON_WEAK_PASSWORDS:
@@ -40,12 +47,14 @@ def _validate_password_strength(value: str) -> str:
 # REGISTER
 # =====================================================================
 
-class RegisterRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)  # boşluklary awtomatik arassalaýar
 
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     email: EmailStr
     username: str = Field(min_length=3, max_length=32)
-    password: str = Field(min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH)
+    password: str = Field(
+        min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH
+    )
 
     @field_validator("username")
     @classmethod
@@ -62,17 +71,10 @@ class RegisterRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str) -> str:
-        # Email-i kiçi harplara öwürmek - "User@Mail.com" bilen
-        # "user@mail.com" iki AÝRY hasap bolup galmaz ýaly.
-        # Bu barlagy schema-da etmek, DB-de "case-insensitive unique
-        # index" bilen bilelikde iki gatlaklaýyn gorag berýär.
         return value.lower()
 
 
 class RegisterResponse(BaseModel):
-    # Bilgeşleýin diňe user_id + email gaýtarýarys - password_hash,
-    # totp_secret ýaly HIÇ HAÇAN response-a çykmaly däl zatlar üçin
-    # "response schema" aýratyn ýazylýar, User model-iň özi gaýtarylmaýar.
     user_id: UUID
     email: str
     message: str = "Hasabyňyzy tassyklamak üçin e-poçtaňyzy barlaň"
@@ -82,15 +84,14 @@ class RegisterResponse(BaseModel):
 # LOGIN
 # =====================================================================
 
+
 class LoginRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
-
     email: EmailStr
     password: str = Field(min_length=1, max_length=_MAX_PASSWORD_LENGTH)
-    # totp_code - Optional, sebäbi diňe totp_enabled=true bolan
-    # ulanyjylardan gerek. Min/max length - 6 haneli koddan başga
-    # zat iberilse, DB/security.py-a ýetmänkä şu ýerde saklanýar.
-    totp_code: str | None = Field(default=None, min_length=6, max_length=6, pattern=r"^\d{6}$")
+    totp_code: str | None = Field(
+        default=None, min_length=6, max_length=6, pattern=r"^\d{6}$"
+    )
 
     @field_validator("email")
     @classmethod
@@ -101,4 +102,6 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in: int = 900  # security.py-daky ACCESS_TOKEN_TTL_SECONDS bilen SINHRON saklanmaly
+    expires_in: int = (
+        900  # security.py-daky ACCESS_TOKEN_TTL_SECONDS bilen SINHRON saklanmaly
+    )
