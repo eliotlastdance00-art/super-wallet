@@ -15,6 +15,7 @@ class UserRecord:
     locked_until: datetime | None
     totp_enabled: bool
     totp_secret_encrypted: str | None
+    email_verified: bool
 
 
 class UserRepository:
@@ -43,14 +44,14 @@ class UserRepository:
         )
         if row is None:
             raise RuntimeError("Failed to insert user; no row returned.")
-        
+
         return row["id"]
 
     async def get_by_id(self, user_id: UUID) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
             SELECT id, username, email, hashed_password , failed_login_count,
-                    locked_until, totp_enabled, totp_secret_encrypted
+                    locked_until, totp_enabled, totp_secret_encrypted,email_verified 
             FROM users WHERE id = $1
             """,
             user_id,
@@ -61,7 +62,7 @@ class UserRepository:
         row = await self._conn.fetchrow(
             """
             SELECT id, username, email, hashed_password, failed_login_count,
-                    locked_until, totp_enabled, totp_secret_encrypted
+                    locked_until, totp_enabled, totp_secret_encrypted,email_verified 
             FROM users WHERE email = $1
             """,
             email,
@@ -72,7 +73,7 @@ class UserRepository:
         row = await self._conn.fetchrow(
             """
             SELECT id, username, email, hashed_password, failed_login_count,
-                    locked_until, totp_enabled, totp_secret_encrypted
+                    locked_until, totp_enabled, totp_secret_encrypted,email_verified 
             FROM users WHERE username = $1
             """,
             username,
@@ -117,12 +118,28 @@ class UserRepository:
             enabled,
         )
 
+    async def set_email_verified(self, user_id: UUID) -> None:
+        """
+        Näme üçin aýratyn metod, update_password_hash ýaly umumy UPDATE
+        etmän: sebäbi bu 'domain event' ýaly bir amal - diňe bir column
+        üýtgänok, bu ulanyjynyň hasabynyň "trust" derejesiniň üýtgänini
+        aňladýar. Aýratyn ada eýe bolmagy, service gatlagynda okalanda
+        näme bolup geçýänini aýdyň edýär (intent-revealing name).
+        """
+        await self._conn.execute(
+            "UPDATE users SET email_verified = true WHERE id = $1",
+            user_id,
+        )
+
 
 @dataclass
 class SessionRecord:
     id: UUID
     user_id: UUID
     refresh_token_hash: str
+    device_info: str | None
+    ip_address: str | None
+    created_at: datetime
     revoked_at: datetime | None
     expires_at: datetime
 
@@ -142,9 +159,23 @@ class SessionRepository:
             id=row["id"],
             user_id=row["user_id"],
             refresh_token_hash=row["refresh_token_hash"],
+            device_info=row["device_info"],
+            ip_address=str(row["ip_address"]) if row["ip_address"] else None,
+            created_at=row["created_at"],
             revoked_at=row["revoked_at"],
             expires_at=row["expires_at"],
         )
+
+    async def get_by_id(self, session_id: UUID) -> SessionRecord | None:
+        row = await self._conn.fetchrow(
+            """
+            SELECT id, user_id, refresh_token_hash, device_info, ip_address,
+                    created_at, revoked_at, expires_at
+            FROM sessions WHERE id = $1
+            """,
+            session_id,
+        )
+        return self._to_record(row) if row else None
 
     async def create(
         self,
@@ -168,14 +199,14 @@ class SessionRepository:
         )
         if row is None:
             raise RuntimeError("Failed to insert user; no row returned.")
-        
+
         return row["id"]
 
     async def get_by_token_hash(self, token_hash: str) -> SessionRecord | None:
         """Diňe ÄHLI (revoke edilmedik) sessiýany tapýar - login/refresh üçin ulanylýar."""
         row = await self._conn.fetchrow(
             """
-            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at
+            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at,device_info, ip_address, created_at
             FROM sessions
             WHERE refresh_token_hash = $1 AND revoked_at IS NULL
             """,
@@ -192,7 +223,7 @@ class SessionRepository:
         """
         row = await self._conn.fetchrow(
             """
-            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at
+            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at,device_info, ip_address, created_at
             FROM sessions
             WHERE refresh_token_hash = $1 AND revoked_reason = 'rotated'
             """,
@@ -254,7 +285,7 @@ class SessionRepository:
             ip_address,
             expires_at,
         )
-        if  new_row is None:
+        if new_row is None:
             raise RuntimeError("Failed to insert new session; no ID returned.")
         new_id = new_row["id"]
 
@@ -273,7 +304,7 @@ class SessionRepository:
         """Geljekde SessionService-däki 'GET /users/me/sessions' üçin gerek bolar."""
         rows = await self._conn.fetch(
             """
-            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at
+            SELECT id, user_id, refresh_token_hash, revoked_at, expires_at,device_info, ip_address, created_at
             FROM sessions
             WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
             ORDER BY created_at DESC
@@ -281,3 +312,97 @@ class SessionRepository:
             user_id,
         )
         return [self._to_record(r) for r in rows]
+
+
+@dataclass
+class VerificationTokenRecord:
+    id: UUID
+    user_id: UUID
+    token_hash: str
+    type: str
+    expires_at: datetime
+    used_at: datetime | None
+
+
+class VerificationTokenRepository:
+    """
+    email_verify we password_reset ikisi-de şu bir repository-den
+    geçýär - sebäbi CRUD-y edil meňzeş (token döret, tap, "ulanyldy"
+    diýip belle), diňe 'type' tapawutly. Iki aýry repository ýazmak
+    diňe kod gaýtalanmasyny (duplication) döreder.
+    """
+
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    def _to_record(self, row) -> VerificationTokenRecord:
+        return VerificationTokenRecord(**dict(row))
+
+    async def create(
+        self,
+        user_id: UUID,
+        token_hash: str,
+        type: str,
+        expires_at: datetime,
+        ip_address: str | None = None,
+    ) -> UUID:
+        row = await self._conn.fetchrow(
+            """
+            INSERT INTO verification_tokens
+            (user_id,token_hash,type,expires_at,ip_address,created_at)
+            VALUES ($1,$2,$3,$4,$5,now()
+            RETURNING id)
+            """,
+            user_id,
+            token_hash,
+            type,
+            expires_at,
+            ip_address,
+        )
+        if row is None:
+            raise RuntimeError("Failed to insert verification token; no row returned.")
+        return row["id"]
+
+    async def get_valid_by_hash(
+        self, token_hash: str, type: str
+    ) -> VerificationTokenRecord | None:
+        """
+        Diňe entäk ulanylmadyk (used_at IS NULL) we möhleti geçmedik
+        token-i tapýar. 'type' barlagy - eger kimdir biri email-verify
+        token-ini password-reset endpoint-e iberip synanyşsa, bu ony
+        blokirleýär (bir token diňe öz maksady üçin işlemeli).
+        """
+        row = await self._conn.fetchrow(
+            """
+            SELECT id, user_id, token_hash, type, expires_at, used_at
+            FROM verification_tokens
+            WHERE token_hash = $1 AND type = $2
+                AND used_at IS NULL AND expires_at > now()
+            """,
+            token_hash,
+            type,
+        )
+        return self._to_record(row) if row else None
+
+    async def mark_used(self, token_id: UUID) -> None:
+        await self._conn.execute(
+            "UPDATE verification_tokens SET used_at = now() WHERE id = $1",
+            token_id,
+        )
+
+    async def invalidate_all_for_user(self, user_id: UUID, type_: str) -> None:
+        """
+        resend-verification / forgot-password gaýtadan soralanda çagyrylýar:
+        öňki ulanylmadyk token-leri "öli" edýär, sebäbi bir ulanyjyda
+        diňe iň soňky iberilen link işlemeli - öňki e-mail-lerdäki
+        linkler entäk "valid" görünse, bu attack surface-i giňeldýär.
+        """
+        await self._conn.execute(
+            """
+            UPDATE verification_tokens
+            SET used_at = now()
+            WHERE user_id = $1 AND type = $2 AND used_at IS NULL
+            """,
+            user_id,
+            type_,
+        )
