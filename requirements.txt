@@ -8,3 +8,5 @@ python-dotenv==1.0.1
 celery==5.4.0
 redis==5.2.1
 psycopg2-binary==2.9.10
+aiosmtplib
+grrenlet

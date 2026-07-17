@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     Alembic_URL: str
     TOKEN_SIGNING_KEY: str
     ENCRYPTION_KEY: str
+    SMTP_HOST: str
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    EMAIL_FROM_ADDRESS: str
 
     # Modern Pydantic v2 Configuration
     model_config = SettingsConfigDict(

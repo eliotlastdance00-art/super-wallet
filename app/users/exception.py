@@ -241,3 +241,15 @@ __all__ = [
     "SessionNotFoundError",
     "EXCEPTION_REGISTRY",
 ]
+
+
+class InvalidVerificationTokenError(Exception):
+    """Email-verify JWT bozuk/expire/purpose ýalňyş bolanda."""
+    def __init__(self, reason: str = "invalid_token"):
+        self.reason = reason
+
+
+class PasswordResetTokenInvalidError(Exception):
+    """Password-reset opaque token tapylmady/eýýäm ulanyldy/expire boldy."""
+    def __init__(self, reason: str = "invalid_or_used"):
+        self.reason = reason

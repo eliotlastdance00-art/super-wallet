@@ -1,7 +1,7 @@
 # app/users/security.py
 
 import secrets
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pyotp
@@ -9,13 +9,12 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from app.core.security import (
+    decrypt_value,
+    encrypt_value,
+    hash_opaque_token,
     sign_token,
     verify_token,
-    encrypt_value,
-    decrypt_value,
-    hash_opaque_token,
 )
-
 
 # =====================================================================
 # PAROL HASH (argon2id)
@@ -78,8 +77,12 @@ def decode_access_token(token: str) -> UUID | None:
 # kabul edilse, hüjümçi "email tassyklama linkini" ulanyp, hasaba giriş
 # edip biler. Purpose barlagy - bu hüjümiň öňüni alýan esasy gorag.
 
-EMAIL_VERIFICATION_TTL_SECONDS = 24 * 60 * 60       # 1 gün
-PASSWORD_RESET_TTL_SECONDS = 30 * 60                 # 30 min - gysga, sebäbi has howply
+EMAIL_VERIFICATION_TTL_SECONDS = 24 * 60 * 60  # 1 gün
+PASSWORD_RESET_TTL_SECONDS = 30 * 60  # 30 min - gysga, sebäbi has howply
+
+
+def password_reset_token_expiry() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(seconds=PASSWORD_RESET_TTL_SECONDS)
 
 
 def create_email_verification_token(user_id: UUID) -> str:
@@ -136,6 +139,7 @@ hash_refresh_token = hash_opaque_token
 # TOTP (2FA)
 # =====================================================================
 
+
 def generate_totp_secret() -> str:
     return pyotp.random_base32()
 
@@ -153,12 +157,15 @@ def verify_totp_code(raw_secret: str, code: str) -> bool:
 
 
 def generate_provisioning_uri(raw_secret: str, user_email: str) -> str:
-    return pyotp.TOTP(raw_secret).provisioning_uri(name=user_email, issuer_name="SuperWallet")
+    return pyotp.TOTP(raw_secret).provisioning_uri(
+        name=user_email, issuer_name="SuperWallet"
+    )
 
 
 # =====================================================================
 # BACKUP KODLAR
 # =====================================================================
+
 
 def generate_backup_codes(count: int = 10) -> list[str]:
     return [secrets.token_hex(4) for _ in range(count)]
@@ -189,7 +196,9 @@ _LOCKOUT_THRESHOLDS: dict[int, timedelta] = {
 
 
 def compute_lockout(failed_count: int) -> datetime | None:
-    applicable = [d for threshold, d in _LOCKOUT_THRESHOLDS.items() if failed_count >= threshold]
+    applicable = [
+        d for threshold, d in _LOCKOUT_THRESHOLDS.items() if failed_count >= threshold
+    ]
     if not applicable:
         return None
     return datetime.now(timezone.utc) + max(applicable)
