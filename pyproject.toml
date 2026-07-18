@@ -15,3 +15,6 @@ dependencies = [
     "pyotp",
     "watchfiles"
 ]
+
+[tool.setuptools]
+packages = ["app"]
