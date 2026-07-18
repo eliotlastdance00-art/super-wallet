@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.users.security import decode_access_token
 from app.users.repository import UserRepository, UserRecord
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=True)
 
 
 async def get_current_user(
