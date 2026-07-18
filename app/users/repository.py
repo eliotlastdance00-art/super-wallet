@@ -346,12 +346,13 @@ class VerificationTokenRepository:
         expires_at: datetime,
         ip_address: str | None = None,
     ) -> UUID:
+        
         row = await self._conn.fetchrow(
             """
             INSERT INTO verification_tokens
             (user_id,token_hash,type,expires_at,ip_address,created_at)
-            VALUES ($1,$2,$3,$4,$5,now()
-            RETURNING id)
+            VALUES ($1,$2,$3,$4,$5,now())
+            RETURNING id;
             """,
             user_id,
             token_hash,

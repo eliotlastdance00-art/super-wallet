@@ -1,4 +1,16 @@
 services:
+  
+  notification_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m app.notifications.worker
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
   db:
     image: postgres:16
     environment:
@@ -24,6 +36,7 @@ services:
       - .env
     ports:
       - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  
     volumes:
       - .:/app
 
@@ -31,13 +44,4 @@ volumes:
   pgdata:
 
 
-  notification_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python -m app.notifications.worker
-    env_file:
-      - .env
-    depends_on:
-      - db
-    restart: unless-stopped
+  

@@ -2,10 +2,10 @@
 import asyncio
 import logging
 
-from core.database import db, get_connection
-from core.outbox import OutboxRepository
-from notifications.handlers.email_handler import handle_email_event
-from core.config import settings
+from app.core.config import settings
+from app.core.database import db, get_connection
+from app.core.outbox import OutboxRepository
+from app.notifications.handlers.email_handler import handle_email_event
 
 logger = logging.getLogger("notifications.worker")
 

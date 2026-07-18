@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.core.audit import log_audit_event
 from app.users import security
+
+from app.core.audit import log_audit_event
+from app.core.outbox import OutboxRepository
 from app.users.exception import (
     AccountLockedError,
     EmailAlreadyExistsError,
@@ -27,8 +29,9 @@ class RegisterResult:
 class RegisterService:
     """Use-case: täze ulanyjy hasabyny döretmek."""
 
-    def __init__(self, repo: UserRepository):
+    def __init__(self, repo: UserRepository, outbox_repo: OutboxRepository):
         self._repo = repo
+        self.outbox_repo = outbox_repo
 
     async def execute(
         self,
@@ -58,6 +61,16 @@ class RegisterService:
                 ip_address,
                 user_agent,
                 metadata={"email": email, "username": username},
+            )
+
+            # outbox-a email event goýulýar
+            await self.outbox_repo.enqueue(
+                event_type="email",
+                payload={
+                    "template": "email_verification",
+                    "to": email,
+                    "token": verification_token,
+                },
             )
 
             return RegisterResult(

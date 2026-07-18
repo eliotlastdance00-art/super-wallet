@@ -1,5 +1,5 @@
-from notifications.providers.email_provider import send_raw_email
-from notifications.templates import EMAIL_TEMPLATE_RENDERERS
+from app.notifications.providers.email_provider import send_raw_email
+from app.notifications.templates import EMAIL_TEMPLATE_RENDERERS
 
 
 async def handle_email_event(payload: dict) -> None:

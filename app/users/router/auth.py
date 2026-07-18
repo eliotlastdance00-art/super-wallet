@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Request, Response,status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.database import get_db
+from app.core.outbox import OutboxRepository
 from app.users.dependencies import get_current_user
 from app.users.exception import InvalidRefreshTokenError, RefreshTokenInvalidReason
 from app.users.repository import SessionRepository, UserRepository
@@ -29,7 +30,7 @@ router = APIRouter()
 
 
 def get_register_service(conn=Depends(get_db)) -> RegisterService:
-    return RegisterService(UserRepository(conn))
+    return RegisterService(UserRepository(conn), OutboxRepository(conn))
 
 
 def get_login_service(conn=Depends(get_db)) -> LoginService:
@@ -87,7 +88,9 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     summary="Register new user",
     responses={
         409: {"description": "Email or username already exists"},
-        422: {"description": "Validation error (weak password, invalid email format, etc.)"},
+        422: {
+            "description": "Validation error (weak password, invalid email format, etc.)"
+        },
     },
 )
 async def register(
@@ -115,6 +118,7 @@ async def register(
     )
 
     return RegisterResponse(user_id=result.user_id, email=result.email)
+
 
 @router.post(
     "/login",
@@ -154,6 +158,7 @@ async def login(
     _set_refresh_cookie(response, result.refresh_token)
     return TokenResponse(access_token=result.access_token)
 
+
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -186,6 +191,7 @@ async def logout(
             user_agent=get_user_agent(request),
         )
     response.delete_cookie(_REFRESH_COOKIE_NAME, path="/auth")
+
 
 @router.post(
     "/refresh",
