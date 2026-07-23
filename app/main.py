@@ -1,8 +1,12 @@
 from contextlib import asynccontextmanager
-from fastapi import APIRouter, FastAPI
+
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import db
+from app.fiat.router import router as fiat_router
+from app.users.exception import AppError
 from app.users.router.auth import router as user_auth_router
 from app.users.router.profile import router as profile_router
 from app.users.router.session_auth import router as session_auth_router
@@ -24,6 +28,19 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+# Global exception handler — converts every AppError subclass to structured JSON
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+            "details": exc.details,
+        },
+    )
 
 # 1. Agzybirlikli V1 Root Router
 v1_router = APIRouter(
@@ -55,6 +72,10 @@ v1_router.include_router(
     profile_router,
     prefix="/users/me",
     tags=["User Profile"],
+)
+v1_router.include_router(
+    fiat_router,
+    tags=["Fiat Ledger"],
 )
 
 # 3. V1 Router-i Esasy App-a goşmak
