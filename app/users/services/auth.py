@@ -230,7 +230,7 @@ class RefreshService:
     Sebäbi "refresh token reuse detection" diýen pattern: eger biri
     ogurlanan köne refresh tokeni ulanjak bolsa (asyl eýesi eýýäm
     täzesini alan bolsa), bu - "token replay attack" alamaty. Muny
-    aňlaýan badyna, şol ulanyjynyň BÄHBIR sessiýalaryny ýatyrmak gerek.
+    aňlaýan badyna, şol ulanyjynyň ahli sessiýalaryny ýatyrmak gerek.
     """
 
     def __init__(self, repo: UserRepository, session_repo: SessionRepository):

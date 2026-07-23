@@ -156,7 +156,7 @@ class RefreshTokenInvalidReason(str, enum.Enum):
     REVOKED = "revoked"
     REUSED = "reused"
     MALFORMED = "malformed"
-    MISSING ="missing"
+    MISSING = "missing"
 
 
 class InvalidRefreshTokenError(AuthError):
@@ -209,6 +209,37 @@ class SessionNotFoundError(AuthError):
         super().__init__("Session not found.", details={"session_id": session_id})
 
 
+# ── Verification & Password Reset ────────────────────────────────────────
+
+
+class InvalidVerificationTokenError(AuthError):
+    """Email-verify JWT bozuk/expire/purpose ýalňyş bolanda."""
+
+    error_code: ClassVar[str] = "invalid_verification_token"
+    http_status: ClassVar[int] = 400
+
+    def __init__(self, reason: str = "invalid_token") -> None:
+        self.reason = reason
+        super().__init__(
+            f"Verification token is invalid or expired: {reason}.",
+            details={"reason": reason},
+        )
+
+
+class PasswordResetTokenInvalidError(AuthError):
+    """Password-reset opaque token tapylmady/eýýäm ulanyldy/expire boldy."""
+
+    error_code: ClassVar[str] = "invalid_password_reset_token"
+    http_status: ClassVar[int] = 400
+
+    def __init__(self, reason: str = "invalid_or_used") -> None:
+        self.reason = reason
+        super().__init__(
+            f"Password reset token is invalid, used or expired: {reason}.",
+            details={"reason": reason},
+        )
+
+
 # ── Registry ─────────────────────────────────────────────────────────────
 
 EXCEPTION_REGISTRY: dict[str, type[AuthError]] = {
@@ -223,6 +254,8 @@ EXCEPTION_REGISTRY: dict[str, type[AuthError]] = {
         InvalidRefreshTokenError,
         SessionExpiredError,
         SessionNotFoundError,
+        InvalidVerificationTokenError,
+        PasswordResetTokenInvalidError,
     )
 }
 
@@ -239,17 +272,7 @@ __all__ = [
     "InvalidRefreshTokenError",
     "SessionExpiredError",
     "SessionNotFoundError",
+    "InvalidVerificationTokenError",
+    "PasswordResetTokenInvalidError",
     "EXCEPTION_REGISTRY",
 ]
-
-
-class InvalidVerificationTokenError(Exception):
-    """Email-verify JWT bozuk/expire/purpose ýalňyş bolanda."""
-    def __init__(self, reason: str = "invalid_token"):
-        self.reason = reason
-
-
-class PasswordResetTokenInvalidError(Exception):
-    """Password-reset opaque token tapylmady/eýýäm ulanyldy/expire boldy."""
-    def __init__(self, reason: str = "invalid_or_used"):
-        self.reason = reason

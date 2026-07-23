@@ -47,6 +47,26 @@ class UserRepository:
 
         return row["id"]
 
+    async def update_profile(self, user_id: UUID, username: str, email: str) -> None:
+        """Ulanyjynyň profil maglumatlaryny täzeleýär."""
+        await self._conn.execute(
+            """
+            UPDATE users 
+            SET username = $2, email = $3 
+            WHERE id = $1
+            """,
+            user_id,
+            username,
+            email,
+        )
+
+    async def delete(self, user_id: UUID) -> None:
+        """Ulanyjynyň hasabyny ulgamdan doly öçürýär."""
+        await self._conn.execute(
+            "DELETE FROM users WHERE id = $1",
+            user_id,
+        )
+
     async def get_by_id(self, user_id: UUID) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
@@ -346,7 +366,7 @@ class VerificationTokenRepository:
         expires_at: datetime,
         ip_address: str | None = None,
     ) -> UUID:
-        
+
         row = await self._conn.fetchrow(
             """
             INSERT INTO verification_tokens
