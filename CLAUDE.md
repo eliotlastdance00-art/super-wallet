@@ -1,0 +1,158 @@
+# CLAUDE.md — AI Assistant Instructions for SuperWallet
+
+> This file provides context and rules for AI assistants (Claude, Gemini, etc.) working on this codebase.
+
+---
+
+## Project Summary
+
+SuperWallet is a **production-grade fintech backend** built with FastAPI + asyncpg (raw SQL) + PostgreSQL. It follows a **modular monolith** architecture organized by business domain. The project is built in deliberate stages, with Stage 0 (Identity & Auth) largely complete and Stage 1 (Fiat Ledger) next.
+
+---
+
+## Architecture Rules (Non-Negotiable)
+
+### 1. Raw SQL Only — No ORM
+All database queries use **raw asyncpg** (`conn.execute()`, `conn.fetchrow()`, `conn.fetch()`). There is no SQLAlchemy ORM layer. Alembic migrations use `op.execute()` with raw SQL for table creation. Do NOT introduce ORM models or query builders.
+
+### 2. Single Connection Per Transaction
+Repositories receive a single `asyncpg.Connection`, never the pool. Transaction boundaries (`async with conn.transaction()`) are managed by the **service layer**, not the repository. This ensures multiple repository calls compose into one atomic operation.
+
+```python
+# ✅ Correct
+async with conn.transaction():
+    user = await user_repo.create(...)
+    await outbox.enqueue(...)
+    await audit.log_audit_event(conn, ...)
+
+# ❌ Wrong — repository acquiring its own connection
+class BadRepo:
+    async def create(self):
+        async with self.pool.acquire() as conn:  # breaks transaction composability
+            ...
+```
+
+### 3. Layered Architecture
+```
+Router (HTTP concerns, Pydantic validation)
+  → Service (business rules, transaction boundaries, audit logging)
+    → Repository (raw SQL, data access, no business logic)
+```
+- **Routers** never contain business logic. They validate input, call a service, and return a response.
+- **Services** never import FastAPI or HTTP concepts. They raise domain exceptions (not `HTTPException`).
+- **Repositories** never open transactions. They receive a connection and execute queries.
+
+### 4. Transactional Outbox for Side Effects
+Never send emails, push notifications, or call external services directly from a request handler. Instead:
+1. Write an event to `outbox_events` within the same DB transaction as the business operation
+2. The `notification_worker` process polls and processes events asynchronously
+3. This prevents dual-write bugs (DB commits but side effect fails, or vice versa)
+
+### 5. Integer Money — No Floats
+All monetary values are stored as `BIGINT` in minor units (e.g., cents). `10050` means `$100.50`. Never use `DECIMAL`, `FLOAT`, or `NUMERIC` for money storage or arithmetic. Display formatting happens only at the API boundary.
+
+---
+
+## Code Conventions
+
+### Python Style
+- Python 3.12+, use `X | None` instead of `Optional[X]`
+- Type hints on all function signatures
+- Dataclasses for repository return types (e.g., `UserRecord`, `SessionRecord`)
+- Pydantic `BaseModel` for request/response schemas only
+
+### Naming
+- Files: `snake_case.py`
+- Classes: `PascalCase` (e.g., `UserRepository`, `LoginService`, `RegisterRequest`)
+- Exceptions: `PascalCase` ending in `Error` (e.g., `AccountLockedError`)
+- Tables: `snake_case` plural (e.g., `users`, `sessions`, `ledger_entries`)
+- Columns: `snake_case` (e.g., `user_id`, `refresh_token_hash`)
+
+### Error Handling
+- All domain exceptions extend `AppError` (defined in `users/exception.py`, should move to `core/`)
+- Each exception has a class-level `error_code` (str) and `http_status` (int)
+- The global handler converts exceptions to `{"error_code": "...", "message": "..."}`
+- Never raise `HTTPException` from the service layer
+
+### Migrations
+- Use Alembic with `op.execute()` and raw SQL
+- Each migration file has a descriptive message and proper `down_revision` chain
+- Current chain: `72f842f79d39` → `78e1d7555d97` → `3f90933d8b8e` → `0c8b4bad93cb` → `3650d9f0f918` → `e9f2c9cad5d9` → `2f7aa7f357e9` → `7d6ecb555e4c`
+
+---
+
+## Domain Knowledge
+
+### Auth Token Hierarchy
+| Token | Purpose | Created By | Stored As |
+|---|---|---|---|
+| Access token | API authentication | `sign_token()` (custom HMAC-SHA256) | Client memory only |
+| Refresh token | Token rotation | `secrets.token_urlsafe(32)` | Hashed (SHA-256) in `sessions` |
+| Email verify token | Email confirmation | `sign_token()` with `purpose: verify_email` | Sent via email link |
+| Password reset token | Password recovery | Opaque + stored hashed in `verification_tokens` | Sent via email |
+
+### Key Security Patterns
+- **Refresh token rotation with reuse detection** — old tokens are kept (revoked, reason='rotated') to detect if a stolen token is replayed
+- **Account lockout** — progressive: 6 fails → 15 min, 10 fails → 1 hour
+- **Transparent password rehash** — if Argon2 params change, passwords are re-hashed on successful login
+- **Purpose-scoped tokens** — email verification tokens cannot be used as access tokens (and vice versa) due to `purpose` claim validation
+
+### Database IDs
+- All primary keys are **UUID** (generated by `gen_random_uuid()` in Postgres)
+- Exception: `audit_logs.id` is `BIGINT` (append-only, no need for UUID)
+
+### Existing Outbox Event Types
+- `"email"` — with `payload.template` set to `"email_verification"` or `"password_reset"`
+
+---
+
+## What NOT to Do
+
+1. **Don't add an ORM** — the explicit SQL is intentional for control over locking, transactions, and query shape
+2. **Don't store monetary values as float/decimal** — always integer minor units
+3. **Don't send emails directly from services** — use the outbox pattern
+4. **Don't use `HTTPException` in services** — raise domain exceptions
+5. **Don't hard-delete data** — use soft delete (`is_active = false, deleted_at = now()`)
+6. **Don't store secrets in the repository** — `.env` should be in `.gitignore`, use `.env.example` for templates
+7. **Don't break the migration chain** — always set `down_revision` to the previous migration's revision ID
+8. **Don't introduce new dependencies without justification** — this project is intentionally lean
+
+---
+
+## File Map (Quick Reference)
+
+```
+app/
+├── main.py                          # FastAPI app, lifespan, router registration
+├── core/
+│   ├── config.py                    # Settings (pydantic-settings)
+│   ├── database.py                  # DatabasePool singleton (asyncpg)
+│   ├── security.py                  # sign_token, verify_token, encrypt/decrypt, CSPRNG
+│   ├── audit.py                     # log_audit_event (raw INSERT)
+│   ├── outbox.py                    # OutboxRepository (enqueue, fetch, mark)
+│   ├── dependencies.py              # get_db, get_current_user (FastAPI Depends)
+│   └── exceptions.py                # ⚠️ EMPTY — AppError is in users/exception.py
+├── users/
+│   ├── exception.py                 # AppError hierarchy, EXCEPTION_REGISTRY
+│   ├── security.py                  # Argon2, tokens, TOTP, backup codes, lockout
+│   ├── repository.py                # UserRepo, SessionRepo, VerificationTokenRepo
+│   ├── router/{auth,session_auth,profile}.py
+│   ├── services/{auth,session_auth,profile}.py
+│   └── schemas/{auth,session_auth,profile}.py
+├── notifications/
+│   ├── worker.py                    # Async polling loop (separate process)
+│   ├── templates.py                 # Email HTML renderers
+│   ├── handlers/email_handler.py    # event_type dispatch
+│   └── providers/email_provider.py  # aiosmtplib SMTP send
+├── fiat/                            # Stage 1 stubs (all empty)
+├── cards/                           # Stage 2 placeholder
+└── crypto/                          # Stage 3 placeholder
+```
+
+---
+
+## Current Stage & Next Steps
+
+**Stage 0 (Identity & Auth):** ~90% complete. Profile endpoints are wired up. Remaining: 2FA enable/disable endpoints, rate limiting, email change re-verification.
+
+**Stage 1 (Fiat Ledger):** Next. See `PLAN.md` for the implementation roadmap.
