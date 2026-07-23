@@ -240,9 +240,73 @@ class PasswordResetTokenInvalidError(AuthError):
         )
 
 
-# ── Registry ─────────────────────────────────────────────────────────────
+class ProfileError(AppError):
+    """Profile bounded context üçin umumy ata klas — handler `except ProfileError`
+    bilen bir şahaly tutup bilsin diýip."""
 
-EXCEPTION_REGISTRY: dict[str, type[AuthError]] = {
+    error_code: ClassVar[str] = "profile_error"
+    http_status: ClassVar[int] = 400
+
+
+class UserNotFoundError(ProfileError):
+    """
+    JWT-den gelen user_id DB-de tapylmasa. Normalda bolmaly däl (token
+    valid bolsa user hem bar bolmaly), ýöne token ulanylandan soň user
+    soft-delete edilen bolsa ýüze çykyp biler.
+    """
+
+    error_code: ClassVar[str] = "user_not_found"
+    http_status: ClassVar[int] = 404
+
+    def __init__(self) -> None:
+        super().__init__("User not found.")
+
+
+class SamePasswordError(ProfileError):
+    """
+    Täze password köne bilen deň. Argon2 hash deňeşdirip bolmaýar,
+    diňe verify arkaly barlanýar — şonuň üçin bu barlag service
+    gatlagynda edilýär, repo-da däl.
+    """
+
+    error_code: ClassVar[str] = "same_password"
+
+    def __init__(self) -> None:
+        super().__init__("New password must be different from the current password.")
+
+
+class UserAlreadyDeactivatedError(ProfileError):
+    """
+    Eýýäm soft-delete edilen ulanyjy ikinji gezek DELETE çagyrsa.
+    409 — mysal üçin 204 bilen idempotent ýasamak hem mümkin, ýöne
+    fintech-de "muny eýýäm etdiň" diýip aýdyň bellemek has howpsuz —
+    caller-a näme bolanyny gizlemeýäris.
+    """
+
+    error_code: ClassVar[str] = "user_already_deactivated"
+    http_status: ClassVar[int] = 409
+
+    def __init__(self) -> None:
+        super().__init__("Account is already deactivated.")
+
+
+class IncorrectCurrentPasswordError(AuthError):
+    """
+    ProfileError-den däl, AuthError-den miras alýar — sebäbi bu
+    hakykatdan hem credential verification, auth bounded context-iň
+    işi (login-daky wrong-password bilen edil meňzeş operasiýa,
+    diňe context PATCH /password). Handler-yň `except AuthError`
+    umumy şahasyna gabat gelmegi hem şoňa görä maksadalaýyk.
+    """
+
+    error_code: ClassVar[str] = "incorrect_current_password"
+
+    def __init__(self) -> None:
+        super().__init__("Current password is incorrect.")
+
+
+# ── Registry ─────────────────────────────────────────────────────────────
+EXCEPTION_REGISTRY: dict[str, type[AppError]] = {
     cls.error_code: cls  # type: ignore[misc]
     for cls in (
         EmailAlreadyExistsError,
@@ -256,6 +320,10 @@ EXCEPTION_REGISTRY: dict[str, type[AuthError]] = {
         SessionNotFoundError,
         InvalidVerificationTokenError,
         PasswordResetTokenInvalidError,
+        UserNotFoundError,
+        SamePasswordError,
+        UserAlreadyDeactivatedError,
+        IncorrectCurrentPasswordError,
     )
 }
 
@@ -274,5 +342,10 @@ __all__ = [
     "SessionNotFoundError",
     "InvalidVerificationTokenError",
     "PasswordResetTokenInvalidError",
+    "ProfileError",
+    "UserNotFoundError",
+    "SamePasswordError",
+    "UserAlreadyDeactivatedError",
+    "IncorrectCurrentPasswordError",
     "EXCEPTION_REGISTRY",
 ]

@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.users import security
-
 from app.core.audit import log_audit_event
 from app.core.outbox import OutboxRepository
+from app.users import security
 from app.users.exception import (
     AccountLockedError,
     EmailAlreadyExistsError,

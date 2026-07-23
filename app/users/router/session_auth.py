@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request, status
 
 from app.core.database import get_db
 from app.core.outbox import OutboxRepository
-from app.users.dependencies import get_current_user
+from app.core.dependencies import get_current_user
 from app.users.exception import (
     InvalidVerificationTokenError,
     PasswordResetTokenInvalidError,
@@ -29,8 +29,8 @@ from app.users.services.session_auth import (
     SessionManagementService,
 )
 
-router = APIRouter(prefix="/auth", tags=["session_auth"])
-sessions_router = APIRouter(prefix="/users/me/sessions", tags=["session_auth"])
+router = APIRouter()
+sessions_router = APIRouter()
 
 
 def _client_meta(request: Request) -> tuple[str, str | None]:

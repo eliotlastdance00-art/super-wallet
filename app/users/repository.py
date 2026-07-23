@@ -16,6 +16,7 @@ class UserRecord:
     totp_enabled: bool
     totp_secret_encrypted: str | None
     email_verified: bool
+    is_active: bool
 
 
 class UserRepository:
@@ -47,32 +48,26 @@ class UserRepository:
 
         return row["id"]
 
-    async def update_profile(self, user_id: UUID, username: str, email: str) -> None:
-        """Ulanyjynyň profil maglumatlaryny täzeleýär."""
-        await self._conn.execute(
-            """
-            UPDATE users 
-            SET username = $2, email = $3 
-            WHERE id = $1
-            """,
-            user_id,
-            username,
-            email,
-        )
+    async def update_profile(self, user_id: UUID, **fields) -> None:
+        """fields: diňe üýtgedilýän sütünler (mysal: username='x', email='y')"""
+        if not fields:
+            return
+        set_clauses = [f"{key} = ${i + 2}" for i, key in enumerate(fields)]
+        query = f"UPDATE users SET {', '.join(set_clauses)} WHERE id = $1"
+        await self._conn.execute(query, user_id, *fields.values())
 
-    async def delete(self, user_id: UUID) -> None:
-        """Ulanyjynyň hasabyny ulgamdan doly öçürýär."""
+    async def deactivate(self, user_id: UUID) -> None:
         await self._conn.execute(
-            "DELETE FROM users WHERE id = $1",
+            "UPDATE users SET is_active = false, deleted_at = now() WHERE id = $1",
             user_id,
         )
 
     async def get_by_id(self, user_id: UUID) -> UserRecord | None:
         row = await self._conn.fetchrow(
             """
-            SELECT id, username, email, hashed_password , failed_login_count,
+            SELECT id, username, email,hashed_password , failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted,email_verified 
-            FROM users WHERE id = $1
+            FROM users WHERE id = $1 AND is_active = true
             """,
             user_id,
         )
@@ -83,7 +78,7 @@ class UserRepository:
             """
             SELECT id, username, email, hashed_password, failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted,email_verified 
-            FROM users WHERE email = $1
+            FROM users WHERE email = $1 AND is_active = true
             """,
             email,
         )
@@ -94,7 +89,7 @@ class UserRepository:
             """
             SELECT id, username, email, hashed_password, failed_login_count,
                     locked_until, totp_enabled, totp_secret_encrypted,email_verified 
-            FROM users WHERE username = $1
+            FROM users WHERE username = $1 AND is_active = true
             """,
             username,
         )
