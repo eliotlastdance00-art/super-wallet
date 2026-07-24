@@ -3,10 +3,10 @@
 Fiat Ledger — Repository Layer.
 
 Design rules (from ARCHITECTURE.md):
-  - Every method receives an asyncpg.Connection (never the pool).
-  - Transaction boundaries are owned by the Service layer.
-  - Raw SQL only — no ORM.
-  - Money is stored as BIGINT (minor units). No floats, ever.
+- Every method receives an asyncpg.Connection (never the pool).
+- Transaction boundaries are owned by the Service layer.
+- Raw SQL only — no ORM.
+- Money is stored as BIGINT (minor units). No floats, ever.
 """
 
 from __future__ import annotations
@@ -88,7 +88,9 @@ class WalletRepository:
             user_id,
             currency,
         )
-        assert row is not None, "INSERT RETURNING returned None — this should never happen"
+        assert row is not None, (
+            "INSERT RETURNING returned None — this should never happen"
+        )
         return WalletRecord.from_row(row)
 
     async def get_by_id(self, wallet_id: UUID) -> Optional[WalletRecord]:
@@ -236,7 +238,9 @@ class LedgerEntryRepository:
             direction,
             balance_after,
         )
-        assert row is not None, "INSERT RETURNING returned None — this should never happen"
+        assert row is not None, (
+            "INSERT RETURNING returned None — this should never happen"
+        )
         return LedgerEntryRecord.from_row(row)
 
     async def sum_for_wallet(self, wallet_id: UUID) -> int:
