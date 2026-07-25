@@ -72,3 +72,7 @@ start = "uvicorn.main:main"
 app = "app.main:app"
 host = "0.0.0.0"
 port = 8000
+
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]

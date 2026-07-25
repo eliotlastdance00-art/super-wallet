@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -33,7 +33,7 @@ class WalletRecord:
     updated_at: datetime
 
     @classmethod
-    def from_row(cls, row: asyncpg.Record) -> "WalletRecord":
+    def from_row(cls, row: asyncpg.Record) -> WalletRecord:
         return cls(**dict(row))
 
 
@@ -45,11 +45,11 @@ class TransactionRecord:
     status: str
     amount_minor: int
     currency: str
-    metadata: Optional[dict[str, Any]]
+    metadata: dict | None
     created_at: datetime
 
     @classmethod
-    def from_row(cls, row: asyncpg.Record) -> "TransactionRecord":
+    def from_row(cls, row: asyncpg.Record) -> TransactionRecord:
         d = dict(row)
         if isinstance(d.get("metadata"), str):
             d["metadata"] = json.loads(d["metadata"])
@@ -67,7 +67,7 @@ class LedgerEntryRecord:
     created_at: datetime
 
     @classmethod
-    def from_row(cls, row: asyncpg.Record) -> "LedgerEntryRecord":
+    def from_row(cls, row: asyncpg.Record) -> LedgerEntryRecord:
         return cls(**dict(row))
 
 
@@ -93,7 +93,7 @@ class WalletRepository:
         )
         return WalletRecord.from_row(row)
 
-    async def get_by_id(self, wallet_id: UUID) -> Optional[WalletRecord]:
+    async def get_by_id(self, wallet_id: UUID) -> WalletRecord | None:
         row = await self.conn.fetchrow("SELECT * FROM wallets WHERE id = $1", wallet_id)
         return WalletRecord.from_row(row) if row else None
 
@@ -103,7 +103,7 @@ class WalletRepository:
         )
         return [WalletRecord.from_row(r) for r in rows]
 
-    async def get_and_lock(self, wallet_id: UUID) -> Optional[WalletRecord]:
+    async def get_and_lock(self, wallet_id: UUID) -> WalletRecord | None:
         """Acquire a row-level lock (SELECT FOR UPDATE) for safe mutation."""
         row = await self.conn.fetchrow(
             "SELECT * FROM wallets WHERE id = $1 FOR UPDATE", wallet_id
@@ -150,8 +150,8 @@ class TransactionRepository:
         tx_type: str,
         amount_minor: int,
         currency: str,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> Optional[TransactionRecord]:
+        metadata: dict[str, Any] | None = None,
+    ) -> TransactionRecord | None:
         """
         INSERT ... ON CONFLICT DO NOTHING — returns None when the key already exists.
         The caller should check for None and re-fetch via get_by_idempotency_key.
@@ -174,7 +174,7 @@ class TransactionRepository:
 
     async def get_by_idempotency_key(
         self, idempotency_key: str
-    ) -> Optional[TransactionRecord]:
+    ) -> TransactionRecord | None:
         row = await self.conn.fetchrow(
             "SELECT * FROM transactions WHERE idempotency_key = $1", idempotency_key
         )

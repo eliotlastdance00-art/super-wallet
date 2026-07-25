@@ -1,6 +1,6 @@
 # app/fiat/schemas.py
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,7 +15,6 @@ class CreateWalletRequest(BaseModel):
         max_length=3,
         description="ISO 4217 currency code, e.g. 'USD'",
     )
-
 
 
 class WalletResponse(BaseModel):
@@ -61,7 +60,7 @@ class TransactionResponse(BaseModel):
     status: str
     amount_minor: int
     currency: str
-    metadata: Optional[dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
     created_at: datetime
 
 

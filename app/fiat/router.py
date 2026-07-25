@@ -3,10 +3,10 @@
 Fiat Ledger — Router Layer.
 
 Pattern mirrors app/users/router/* exactly:
- / - Router receives conn via Depends(get_db).
-  - Router instantiates Service with that conn.
-  - Router never calls Repository directly.
-  - All auth is via Depends(get_current_user) → returns UserRecord.
+- Router receives conn via Depends(get_db).
+- Router instantiates Service with that conn.
+- Router never calls Repository directly.
+- All auth is via Depends(get_current_user) → returns UserRecord.
 """
 
 from __future__ import annotations
